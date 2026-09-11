@@ -1,0 +1,311 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Plan {
+  FREE
+  CREATOR
+  PRO
+  AGENCY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELED
+  PAST_DUE
+  INCOMPLETE
+}
+
+enum VideoStatus {
+  PENDING
+  TRANSCRIBING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
+
+enum CaptionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PostStatus {
+  DRAFT
+  READY
+  SCHEDULED
+  PUBLISHED
+  FAILED
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  MANAGER
+  CLIENT
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+}
+
+model User {
+  id                String         @id @default(uuid())
+  email             String         @unique
+  passwordHash      String?
+  name              String?
+  avatarUrl         String?
+  creatorNiche      String?
+  platformsUsed     String[]
+  postingFrequency  String?
+  role              Role           @default(OWNER)
+  isOnboarded       Boolean        @default(false)
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  teams             TeamMember[]
+  projects          Project[]
+  subscriptions     Subscription[]
+  channels          Channel[]
+  ideas             Idea[]
+  notifications     Notification[]
+  presets           BrandPreset[]
+  sentInvitations   Invitation[]   @relation("SentInvitations")
+}
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  members     TeamMember[]
+  projects    Project[]
+  invitations Invitation[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  role      Role     @default(EDITOR)
+  projectId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, userId])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  userId      String
+  teamId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team        Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  videos      Video[]
+  invitations Invitation[]
+  teamMembers TeamMember[]
+}
+
+model Video {
+  id          String      @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  youtubeUrl  String?
+  videoUrl    String?
+  duration    Float?
+  status      VideoStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  transcript  Transcript?
+  clips       Clip[]
+  comments    Comment[]
+}
+
+model Transcript {
+  id        String   @id @default(uuid())
+  videoId   String   @unique
+  text      String
+  segments  Json     // Array of { start: Float, end: Float, text: String }
+  createdAt DateTime @default(now())
+  
+  video     Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+}
+
+model Clip {
+  id              String        @id @default(uuid())
+  videoId         String
+  title           String
+  start           Float
+  end             Float
+  viralityScore   Int
+  retentionScore  Int
+  confidenceScore Int
+  clipUrl         String?
+  transcriptText  String?
+  captionsStatus  CaptionStatus @default(PENDING)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  video           Video         @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  posts           Post[]
+  analytics       Analytics[]
+}
+
+model Post {
+  id            String     @id @default(uuid())
+  clipId        String
+  platform      String     // YOUTUBE_SHORTS, INSTAGRAM_REELS, TIKTOK, etc.
+  status        PostStatus @default(DRAFT)
+  scheduledTime DateTime?
+  publishedTime DateTime?
+  title         String?
+  description   String?
+  hashtags      String[]
+  postUrl       String?
+  errorLog      String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  clip          Clip       @relation(fields: [clipId], references: [id], onDelete: Cascade)
+}
+
+model Analytics {
+  id        String   @id @default(uuid())
+  clipId    String
+  platform  String
+  views     Int      @default(0)
+  likes     Int      @default(0)
+  comments  Int      @default(0)
+  shares    Int      @default(0)
+  watchTime Float    @default(0.0)
+  ctr       Float    @default(0.0)
+  date      DateTime
+  createdAt DateTime @default(now())
+  
+  clip      Clip     @relation(fields: [clipId], references: [id], onDelete: Cascade)
+}
+
+model Channel {
+  id           String   @id @default(uuid())
+  userId       String
+  platform     String   // YOUTUBE, TIKTOK, INSTAGRAM
+  channelId    String
+  channelName  String
+  channelUrl   String?
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id                 String   @id @default(uuid())
+  videoId            String
+  author             String
+  text               String
+  timestamp          Float?
+  replyText          String?
+  processedIntoVideo Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  
+  video              Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+}
+
+model Idea {
+  id        String   @id @default(uuid())
+  userId    String
+  prompt    String
+  content   Json     // { title: String, script: String, hooks: String[], description: String }
+  type      String   // SHORT, THREAD, BLOG, POST
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  userId               String
+  stripeSubscriptionId String             @unique
+  plan                 Plan               @default(FREE)
+  status               SubscriptionStatus
+  priceId              String
+  currentPeriodEnd     DateTime
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BrandPreset {
+  id                String   @id @default(uuid())
+  name              String
+  userId            String
+  captionStyle      String   // beast, podcast, minimalist
+  brandColor        String   // Hex code (e.g. #8b5cf6)
+  watermarkText     String?
+  enableEmojis      Boolean  @default(true)
+  enableProgressBar Boolean  @default(true)
+  enableWatermark   Boolean  @default(true)
+  captionFont       String   @default("Arial")
+  captionPosition   String   @default("bottom")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Invitation {
+  id             String    @id @default(uuid())
+  email          String
+  teamId         String
+  projectId      String?
+  role           Role      @default(EDITOR)
+  invitedById    String
+  token          String    @unique
+  status         String    @default("PENDING") // PENDING, ACCEPTED
+  inviteeName    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  team           Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitedBy      User      @relation("SentInvitations", fields: [invitedById], references: [id], onDelete: Cascade)
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
