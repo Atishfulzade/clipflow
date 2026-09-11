@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import axios from 'axios';
+import { signOAuthState, verifyOAuthState } from '../lib/oauthState';
 
 export const listChannels = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -54,18 +55,23 @@ export const connectChannel = async (req: Request, res: Response): Promise<void>
 
     const googleClientId = process.env.GOOGLE_CLIENT_ID;
 
+    if (!userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const state = signOAuthState(userId);
+
     // If client ID is present, run live Google OAuth redirect
     if (platform.toUpperCase() === 'YOUTUBE' && googleClientId) {
       const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google-callback';
-      const state = `connect-youtube:${userId}`;
-      const googleOAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/youtube.upload&access_type=offline&state=${state}&prompt=consent`;
+      const googleOAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=https://www.googleapis.com/auth/youtube.upload&access_type=offline&state=${encodeURIComponent(state)}&prompt=consent`;
       res.redirect(googleOAuthUrl);
       return;
     }
 
     // Direct local mock callback bypass for local developers/demos
     console.log(`[ChannelsController] Mock OAuth redirect triggered for platform: ${platform}`);
-    const callbackUrl = `${req.protocol}://${req.get('host')}/api/channels/callback/${platform.toLowerCase()}?code=mock-oauth-code-${Date.now()}&state=${userId}`;
+    const callbackUrl = `${req.protocol}://${req.get('host')}/api/channels/callback/${platform.toLowerCase()}?code=mock-oauth-code-${Date.now()}&state=${encodeURIComponent(state)}`;
     res.redirect(callbackUrl);
   } catch (error: any) {
     console.error('[ChannelsController] Connect channel error:', error);
@@ -81,13 +87,13 @@ export const oauthCallback = async (req: Request, res: Response): Promise<void> 
     res.setHeader('Expires', '0');
 
     const { platform } = req.params;
-    const { code, state: userId } = req.query;
-    const ownerId = (userId as string) || (req as any).user?.id;
+    const { code, state } = req.query;
+    const ownerId = verifyOAuthState(state as string);
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     if (!ownerId) {
-      console.error('[ChannelsController] OAuth callback missing state/userId — refusing to link channel.');
+      console.error('[ChannelsController] OAuth callback has an invalid, expired, or missing state token — refusing to link channel.');
       res.redirect(`${frontendUrl}/dashboard/settings?error=oauth_failed`);
       return;
     }

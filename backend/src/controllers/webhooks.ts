@@ -10,31 +10,38 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
   const signature = req.headers['stripe-signature'] as string;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  let event;
+  // Signature verification is mandatory — without it, this endpoint would
+  // accept unauthenticated, forged events (e.g. a fake "subscription
+  // upgraded" event) from anyone on the internet. For local testing, run
+  // `stripe listen --forward-to localhost:3001/api/webhooks/stripe`, which
+  // prints a real webhook secret to put in STRIPE_WEBHOOK_SECRET.
+  if (!webhookSecret || !signature || !(req as any).rawBody) {
+    console.error('[Stripe Webhook] Rejected: missing webhook secret, signature header, or raw body.');
+    res.status(400).send('Webhook Error: signature verification is required and was not satisfied.');
+    return;
+  }
 
-  if (webhookSecret && signature && (req as any).rawBody) {
-    try {
-      event = stripe.webhooks.constructEvent(
-        (req as any).rawBody,
-        signature,
-        webhookSecret
-      );
-    } catch (err: any) {
-      console.error(`[Stripe Webhook] Signature verification failed:`, err.message);
-      res.status(400).send(`Webhook Error: Signature verification failed - ${err.message}`);
-      return;
-    }
-  } else {
-    // Local development/test fallback (signature bypass if keys are missing)
-    console.warn('[Stripe Webhook] Warning: Webhook secret or signature missing. Bypassing signature verification (Local/Test mode).');
-    event = req.body;
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      (req as any).rawBody,
+      signature,
+      webhookSecret
+    );
+  } catch (err: any) {
+    console.error(`[Stripe Webhook] Signature verification failed:`, err.message);
+    res.status(400).send(`Webhook Error: Signature verification failed - ${err.message}`);
+    return;
   }
 
   console.log(`[Stripe Webhook] Event triggered: ${event?.type}`);
 
   try {
-    const type = event?.type;
-    const dataObject = event?.data?.object;
+    const type = event.type;
+    // Cast to `any`: the object shape varies per event type (Subscription,
+    // Checkout Session, etc.) and this handler already narrows behavior on
+    // `type` before touching type-specific fields.
+    const dataObject = event.data.object as any;
 
     if (type === 'checkout.session.completed') {
       const subscriptionId = dataObject.subscription as string;
@@ -131,21 +138,12 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
           });
           console.log(`[Stripe Webhook] Created new subscription ${stripeSubId} from updated event for user ${metadataUserId}`);
         } else {
-          // Fallback to first user in db (for legacy or fallback events)
-          const user = await prisma.user.findFirst();
-          if (user) {
-            await prisma.subscription.create({
-              data: {
-                userId: user.id,
-                stripeSubscriptionId: stripeSubId,
-                plan: planName as any,
-                status: status as any,
-                priceId,
-                currentPeriodEnd,
-              },
-            });
-            console.log(`[Stripe Webhook] Created fallback subscription ${stripeSubId} for user ${user.email}`);
-          }
+          // No way to safely determine which user this event belongs to —
+          // assigning it to an arbitrary user would corrupt their billing
+          // state, so log and skip rather than guess.
+          console.error(
+            `[Stripe Webhook] Received ${type} for unknown subscription ${stripeSubId} with no userId metadata — skipping rather than guessing the owner.`
+          );
         }
       }
     } else if (type === 'customer.subscription.deleted') {
