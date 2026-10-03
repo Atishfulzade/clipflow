@@ -57,7 +57,7 @@ export default function VideosPage() {
 
     try {
       const token = localStorage.getItem("vibecut_token");
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${baseUrl}/api/videos/upload`, {
         method: "POST",
         headers: {

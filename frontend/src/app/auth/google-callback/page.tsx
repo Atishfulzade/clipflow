@@ -19,7 +19,7 @@ function GoogleCallbackContent() {
       const parts = state.split(":");
       const platform = parts[0].replace("connect-", "");
       const userId = parts[1] || "";
-      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
       window.location.href = `${backendUrl}/api/channels/callback/${platform}?code=${code}&state=${userId}`;
       return;
     }

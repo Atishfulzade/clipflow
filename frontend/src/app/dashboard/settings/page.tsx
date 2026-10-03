@@ -129,7 +129,7 @@ export default function SettingsPage() {
             <div className="space-y-3 pt-2">
               {['YOUTUBE', 'TIKTOK', 'INSTAGRAM', 'LINKEDIN', 'X'].map((platform) => {
                 const connected = connectedChannels.find(c => c.platform.toUpperCase() === platform);
-                const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
                 
                 return (
                   <div key={platform} className="flex justify-between items-center text-xs p-3 border border-zinc-900 bg-[#09090b]/40 rounded-xl">

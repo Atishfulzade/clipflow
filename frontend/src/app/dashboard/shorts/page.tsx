@@ -55,7 +55,7 @@ function ShortsPageContent() {
     if (url.startsWith("http://") || url.startsWith("https://")) {
       return url;
     }
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
     return `${baseUrl}${url}`;
   };
 

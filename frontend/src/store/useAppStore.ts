@@ -717,7 +717,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!token) return () => {};
     if (typeof window === 'undefined') return () => {};
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
     const eventSource = new EventSource(`${baseUrl}/api/notifications/stream`, {
       withCredentials: true,
     });

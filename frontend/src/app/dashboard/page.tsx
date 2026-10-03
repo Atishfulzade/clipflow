@@ -474,7 +474,7 @@ export default function DashboardPage() {
               <div className="space-y-4">
                 {['YOUTUBE', 'TIKTOK', 'INSTAGRAM', 'X', 'LINKEDIN'].map((platform) => {
                   const connected = connectedChannels.find(c => c.platform.toUpperCase() === platform);
-                  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+                  const backendUrl = process.env.NEXT_PUBLIC_API_URL || '';
                   
                   return (
                     <div key={platform} className="flex justify-between items-center p-3 border border-zinc-900 bg-zinc-900/10 hover:border-zinc-850 rounded-xl text-xs transition-colors">
